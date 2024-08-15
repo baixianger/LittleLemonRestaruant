@@ -1,139 +1,104 @@
-import * as SQLite from "expo-sqlite";
+import * as SQLite from "expo-sqlite/legacy";
 
 const db = SQLite.openDatabase("little_lemon");
 
-const selectAllMenu = () => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      try {
-        tx.executeSql(
-          `
-              CREATE TABLE IF NOT EXISTS menu (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT NOT NULL,
-                  price NUMERIC NOT NULL,
-                  description TEXT NOT NULL,
-                  image TEXT NOT NULL,
-                  category TEXT NOT NULL
-                  );
-                  `
-        );
-
-        tx.executeSql("select * from menu", [], (_, { rows }) => {
-          const menu = rows._array;
-          resolve(menu);
-        });
-      } catch (error) {
-        console.error("ERROR GETTING MENU", error);
-        reject(error);
-      }
-    });
-  });
-};
-
-const getDataFromApiAsync = async () => {
-  try {
-    const response = await fetch(
-      "https://raw.githubusercontent.com/Meta-Mobile-Developer-PC/Working-With-Data-API/main/capstone.json"
-    );
-    const json = await response.json();
-    return json.menu;
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const insertDish = (dishName, description, price, photoUri, category) => {
+export async function createTable() {
   return new Promise((resolve, reject) => {
     db.transaction(
       (tx) => {
         tx.executeSql(
-          "insert into menu (name,price,description,image,category) values (?,?,?,?,?)",
-          [dishName, price, description, photoUri, category]
-        );
+          "create table if not exists menuitems (id integer primary key not null, name text, price text, description text, image text, category text);",
+          [],
+          () => {console.log("✅表格创建成功"); },
+          (txObj, error) => {console.error("❌表格创建失败 :", error.message);reject(error); }
+          );
       },
       reject,
       resolve
     );
   });
-};
+}
 
-const resetDatabase = () => {
-  return new Promise((resolve, reject) => {
-    try {
-      db.transaction(
-        (tx) => {
-          tx.executeSql("DROP TABLE IF EXISTS menu");
-        },
-        reject,
-        resolve
+export async function dropTable() {
+  db.transaction((tx) => {
+      tx.executeSql(
+        `DROP TABLE IF EXISTS menuitems;`, 
+        [], 
+        ()=>{console.log('✅删表成功');}, 
+        (_, error) => {console.error('❌删表失败 :', error);}
       );
-    } catch (error) {
-      console.error("Error Reseting database", error);
-      reject(error);
-    }
+    });
+}
+
+export async function getMenuItems() {
+  return new Promise(resolve => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        `SELECT * FROM menuitems;`, 
+        [], 
+        (_, { rows }) => {console.log('✅读取行成功, 行数 : ', rows._array.length); resolve(rows._array);}, 
+        (_, error) => {console.log('❌读取行失败 :', error.message);}
+        );
+    });
   });
-};
+}
 
-const checkMenuTableAndPopulateData = async () => {
-  const dbMenu = await selectAllMenu();
-  if (dbMenu?.length) return dbMenu;
-  const menuItemsFromApi = await getDataFromApiAsync();
 
-  const formattedItemsFromApi = menuItemsFromApi.map((item) => ({
-    ...item,
-    image: `https://github.com/Meta-Mobile-Developer-PC/Working-With-Data-API/blob/main/images/${item.image}?raw=true`,
-  }));
-  for (const item of formattedItemsFromApi) {
-    await insertDish(
-      item.name,
-      item.description,
-      item.price,
-      item.image,
-      item.category
-    );
-  }
-  const menuItems = await selectAllMenu();
-  return menuItems;
-};
+export function saveMenuItems(menuItems) {
+  db.transaction((tx) => {
+    menuItems.forEach((item) => {
+      const sql = `INSERT INTO menuitems (id, name, price, description, image, category) VALUES (?, ?, ?, ?, ?, ?);`;
+      tx.executeSql(
+        sql, 
+        [item.id, item.name, item.price, item.description, item.image, item.category], 
+        () => {console.log('✅插入数据成功:', item.id, item.name, item.price, item.image);}, 
+        (_, error) => {console.log('❌插入数据失败 :', item.id, error);}
+        );
+    });
+  });
+}
 
-const filterMenuItems = (categories, searchInput) => {
+
+export async function filterByQueryAndCategories(query, activeCategories) {
   return new Promise((resolve, reject) => {
-    try {
-      const queryArray = [];
-      if (searchInput.length) {
-        queryArray.push(`LOWER(name) LIKE '%${searchInput.toLowerCase()}%'`);
-      }
-      if (categories.length) {
-        for (const catagory of categories) {
-          queryArray.push(`category='${catagory.toLowerCase()}'`);
-        }
-      }
-      const queryString = queryArray.length
-        ? "where " + queryArray.join(" AND ")
-        : "";
-      const finalQuery = `select * from menu ${queryString};`;
-      db.transaction(
-        (tx) => {
-          tx.executeSql(finalQuery, [], (_, { rows }) => {
-            const menu = rows._array;
-            resolve(menu);
-          });
-        },
-        (e) => console.error("ERROR FILTERING", e)
-      );
-    } catch (error) {
-      console.error("Error filtering menu items", error);
-      reject(error);
+    // resolve(SECTION_LIST_MOCK_DATA);
+    const queryFilter = query ? `name LIKE ?` : '1=1';
+    const categoryFilter = activeCategories.length > 0 ? `category IN (${activeCategories.map(() => '?').join(', ')})` : '1=1';
+    const sql = `
+      SELECT * FROM menuitems
+      WHERE ${queryFilter} AND ${categoryFilter};
+    `;
+    const params = [];
+    if (query) {
+      params.push(`%${query}%`);
     }
-  });
-};
+    params.push(...activeCategories);
 
-export {
-  filterMenuItems,
-  selectAllMenu,
-  insertDish,
-  checkMenuTableAndPopulateData,
-  getDataFromApiAsync,
-  resetDatabase,
-};
+    // console.log('SQL语句是 : ', sql);
+    // console.log('参数是 : ', params);
+    
+    db.transaction((tx)=>{
+      tx.executeSql(
+        sql, 
+        params, 
+        (_, {rows})=>{console.log('✅搜索成功, 返回行数 :', rows._array.length, '返回项 : ', rows._array.map(item => item.name)); resolve(rows._array);}, 
+        (_, error) => { console.log('❌搜索失败 :', error);}
+        );
+    });
+  });
+}
+
+export async function testDB(sql, params) {
+  return new Promise(resolve => {
+    db.transaction((tx) => {
+      tx.executeSql(sql, params, (_, { rows }) => {
+        resolve(rows._array);
+      });
+    });
+  });
+}
+
+
+
+
+

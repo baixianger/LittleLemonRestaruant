@@ -1,180 +1,356 @@
-import {
-    FlatList,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
-  } from "react-native";
-  import { useEffect, useState } from "react";
-  import { colors } from "../constants/color";
-  import { filterMenuItems, selectAllMenu } from "../database";
-  import debounce from "../utils/debounce";
-  import HeroSection from "../components/Hero";
-  
-  export default function HomeScreen({ navigation }) {
-    const [menuItems, setMenuItems] = useState([]);
-    const [activeFilters, setActiveFilters] = useState([]);
-    const [searchInput, setSearchInput] = useState("");
-    const [filterCategories, setFilterCategories] = useState([]);
-  
-    const loadMenu = async () => {
+import { useEffect, useState, useCallback, useMemo } from 'react';
+// prettier-ignore
+import {Text, View, StyleSheet, SectionList, Alert, Image, Pressable} from "react-native";
+import { Searchbar } from 'react-native-paper';
+import debounce from 'lodash.debounce';
+// prettier-ignore
+import { dropTable, createTable, getMenuItems, saveMenuItems, filterByQueryAndCategories, testDB} from "../database";
+import Filters from '../components/Filters';
+import { getSectionListData, useUpdateEffect } from '../utils/utils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+
+const BASE_URL =
+  'https://raw.githubusercontent.com/Meta-Mobile-Developer-PC/Working-With-Data-API/main/capstone.json';
+
+const sections = ['starters', 'mains', 'desserts'];
+
+const Item = ({ name, price, description, image }) => (
+  <View style={styles.item}>
+    <View style={styles.itemBody}>
+      <Text style={styles.name}>{name}</Text>
+      <Text style={styles.description}>{description}</Text>
+      <Text style={styles.price}>${price}</Text>
+    </View>
+    <Image
+      style={styles.itemImage}
+      source={{
+        uri: `https://github.com/Meta-Mobile-Developer-PC/Working-With-Data-API/blob/main/images/${image}?raw=true`,
+      }}
+    />
+  </View>
+);
+
+export const Home = ({ navigation }) => {
+  const [profile, setProfile] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    orderStatuses: false,
+    passwordChanges: false,
+    specialOffers: false,
+    newsletter: false,
+    image: '',
+  });
+  const [data, setData] = useState([]);
+  const [searchBarText, setSearchBarText] = useState('');
+  const [query, setQuery] = useState('');
+  const [filterSelections, setFilterSelections] = useState(
+    sections.map(() => false)
+  );
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch(BASE_URL);
+      const json = await response.json();
+      const menu = json.menu.map((item, index) => ({
+        id: index + 1,
+        name: item.name,
+        price: item.price.toString(),
+        description: item.description,
+        image: item.image,
+        category: item.category,
+      }));
+      return menu;
+    } catch (error) {
+      console.error(error);
+    } finally {
+      console.log("✅成功获取api数据");
+    }
+  };
+
+  useEffect(() => {
+    (async () => { 
+      let menuItems = [];
       try {
-        const menuItems = await selectAllMenu();
-        setMenuItems(menuItems);
-        // This code makes it so that the item categories are dynamic and will auto-populate if a new category is added.
-        setFilterCategories([
-          ...new Set(
-            menuItems?.map(
-              (i) => i.category?.charAt(0).toUpperCase() + i.category?.slice(1)
-            )
-          ),
-        ]);
-      } catch (err) {
-        console.error(`There was an error selecting all menu items: ${err}`);
+        await dropTable();
+        await createTable();
+        menuItems = await getMenuItems();
+        if (!menuItems.length) {
+          menuItems = await fetchData();
+          saveMenuItems(menuItems);  
+        }
+        menuItems = await getMenuItems();
+        const sectionListData = getSectionListData(menuItems);
+        setData(sectionListData);
+        const getProfile = await AsyncStorage.getItem('profile');
+        setProfile(JSON.parse(getProfile));
+      } catch (e) {
+        Alert.alert(e.message);
       }
-    };
-  
-    useEffect(() => {
-      loadMenu();
-    }, []);
-  
-    const onFilterClick = (item) => {
-      const indexOfItem = activeFilters.indexOf(item);
-      if (indexOfItem > -1) {
-        const newActiveFilters = activeFilters.filter(
-          (_, index) => index !== indexOfItem
+    })();
+  }, []);
+
+
+  // search
+  useUpdateEffect(() => {
+    (async () => {
+      const activeCategories = sections.filter((s, i) => {
+        if (filterSelections.every((item) => item === false)) {
+          return true;
+        }
+        return filterSelections[i];
+      });
+
+      try {
+        const menuItems = await filterByQueryAndCategories(
+          query,
+          activeCategories
         );
-        setActiveFilters(newActiveFilters);
-      } else {
-        setActiveFilters((activeFilters) => [...activeFilters, item]);
+        const sectionListData = getSectionListData(menuItems);
+        setData(sectionListData);
+      } catch (e) {
+        Alert.alert(e.message);
       }
-    };
-  
-    const filterMenu = () =>
-      filterMenuItems(activeFilters, searchInput).then(setMenuItems);
-  
-    useEffect(() => {
-      const debouncedFilterMenu = debounce(filterMenu, 500);
-      debouncedFilterMenu();
-    }, [searchInput]);
-  
-    useEffect(() => {
-      filterMenu();
-    }, [activeFilters]);
-  
-    return (
-      <View style={styles.homeContainer}>
-        <HeroSection setSearchInput={setSearchInput} />
-        {/*  FILTER SECTION */}
-        <View style={styles.filtersContainer}>
-          <Text style={styles.filterTitle}>ORDER FOR DELIVERY!</Text>
-          <ScrollView style={styles.filterScrollView} horizontal>
-            {filterCategories.map((item, index) => {
-              const isSelected = activeFilters.indexOf(item) > -1;
-              return (
-                <Pressable
-                  style={{
-                    ...styles.filterButton,
-                    backgroundColor: isSelected ? colors.GREEN : colors.GRAY,
-                  }}
-                  key={index}
-                  onPress={() => onFilterClick(item)}
-                >
-                  <Text
-                    style={{
-                      ...styles.filterButtonText,
-                      color: isSelected ? colors.GRAY : colors.GREEN,
-                    }}
-                  >
-                    {item}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-        {/* MENU */}
-        <FlatList
-          data={menuItems}
-          renderItem={({ item }) => {
-            return (
-              <View style={styles.menuItem}>
-                <View style={styles.menuDetails}>
-                  <Text style={styles.itemTitle}>{item.name}</Text>
-                  <Text numberOfLines={2} style={styles.itemDescription}>
-                    {item.description}
-                  </Text>
-                  <Text style={styles.itemPrice}>${item.price}</Text>
-                </View>
-                <View style={styles.itemImageContainer}>
-                  <Image source={{ uri: item.image }} style={styles.menuImage} />
-                </View>
-              </View>
-            );
-          }}
-          keyExtractor={(item, index) => item.name + index}
-          ItemSeparatorComponent={() => (
-            <View
-              style={{
-                height: 0.5,
-                width: "90%",
-                backgroundColor: "grey",
-                alignSelf: "center",
-              }}
-            />
+    })();
+  }, [filterSelections, query]);
+
+  const lookup = useCallback((q) => {
+    setQuery(q);
+  }, []);
+
+  const debouncedLookup = useMemo(() => debounce(lookup, 1000), [lookup]);
+
+  const handleSearchChange = (text) => {
+    setSearchBarText(text);
+    debouncedLookup(text);
+  };
+
+  const handleFiltersChange = async (index) => {
+    const arrayCopy = [...filterSelections];
+    arrayCopy[index] = !filterSelections[index];
+    setFilterSelections(arrayCopy);
+  };
+
+  // FONTS
+  const [fontsLoaded] = useFonts({
+    'Karla-Regular': require('../assets/fonts/Karla-Regular.ttf'),
+    'Karla-Medium': require('../assets/fonts/Karla-Medium.ttf'),
+    'Karla-Bold': require('../assets/fonts/Karla-Bold.ttf'),
+    'Karla-ExtraBold': require('../assets/fonts/Karla-ExtraBold.ttf'),
+    'MarkaziText-Regular': require('../assets/fonts/MarkaziText-Regular.ttf'),
+    'MarkaziText-Medium': require('../assets/fonts/MarkaziText-Medium.ttf'),
+  });
+
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return (
+    <View style={styles.container} onLayout={onLayoutRootView}>
+      <View style={styles.header}>
+        <Image
+          style={styles.logo}
+          source={require('../img/littleLemonLogo.png')}
+          accessible={true}
+          accessibilityLabel={'Little Lemon Logo'}
+        />
+        <Pressable
+          style={styles.avatar}
+          onPress={() => navigation.navigate('Profile')}>
+          {profile.image ? (
+            <Image source={{ uri: profile.image }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarEmpty}>
+              <Text style={styles.avatarEmptyText}>
+                {profile.firstName && Array.from(profile.firstName)[0]}
+                {profile.lastName && Array.from(profile.lastName)[0]}
+              </Text>
+            </View>
           )}
+        </Pressable>
+      </View>
+      <View style={styles.heroSection}>
+        <Text style={styles.heroHeader}>Little Lemon</Text>
+        <View style={styles.heroBody}>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroHeader2}>Chicago</Text>
+            <Text style={styles.heroText}>
+              We are a family owned Mediterranean restaurant, focused on
+              traditional recipes served with a modern twist.
+            </Text>
+          </View>
+          <Image
+            style={styles.heroImage}
+            source={require('../img/restauranfood.png')}
+            accessible={true}
+            accessibilityLabel={'Little Lemon Food'}
+          />
+        </View>
+        <Searchbar
+          placeholder="Search"
+          placeholderTextColor="#333333"
+          onChangeText={handleSearchChange}
+          value={searchBarText}
+          style={styles.searchBar}
+          iconColor="#333333"
+          inputStyle={{ color: '#333333' }}
+          elevation={0}
         />
       </View>
-    );
-  }
-  
-  const styles = StyleSheet.create({
-    homeContainer: {
-      backgroundColor: "white",
-      flex: 1,
-      position: "relative",
-      justifyContent: "center",
-    },
-  
-    filtersContainer: {
-      padding: 20,
-      paddingRight: -20,
-      borderBottomColor: colors.BLACK,
-    },
-    filterTitle: {
-      fontWeight: "900",
-    },
-    filterScrollView: { marginTop: 20, display: "flex" },
-    filterButton: {
-      color: colors.BLACK,
-      borderRadius: 10,
-      marginRight: 12,
-    },
-    filterButtonText: {
-      padding: 10,
-      fontWeight: "bold",
-      textAlign: "center",
-    },
-    menuItem: {
-      padding: 20,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 5,
-    },
-    menuDetails: { flex: 1, gap: 10 },
-    itemTitle: { fontWeight: "bold" },
-    itemDescription: {
-      color: colors.BLACK,
-      fontWeight: "500",
-    },
-    itemPrice: { fontWeight: "500" },
-    itemImageContainer: { width: 100, height: 100, backgroundColor: "black" },
-    menuImage: {
-      resizeMode: "cover",
-      width: 100,
-      height: 100,
-    },
-  });
+      <Text style={styles.delivery}>ORDER FOR DELIVERY!</Text>
+      <Filters
+        selections={filterSelections}
+        onChange={handleFiltersChange}
+        sections={sections}
+      />
+      <SectionList
+        style={styles.sectionList}
+        sections={data}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Item
+            name={item.name}
+            price={item.price}
+            description={item.description}
+            image={item.image}
+          />
+        )}
+        renderSectionHeader={({ section: { name } }) => (
+          <Text style={styles.itemHeader}>{name}</Text>
+        )}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: Constants.statusBarHeight,
+  },
+  header: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    backgroundColor: '#dee3e9',
+  },
+  logo: {
+    height: 50,
+    width: 150,
+    resizeMode: 'contain',
+  },
+  sectionList: {
+    paddingHorizontal: 16,
+  },
+  searchBar: {
+    marginTop: 15,
+    backgroundColor: '#e4e4e4',
+    shadowRadius: 0,
+    shadowOpacity: 0,
+  },
+  item: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#cccccc',
+    paddingVertical: 10,
+  },
+  itemBody: {
+    flex: 1,
+  },
+  itemHeader: {
+    fontSize: 24,
+    paddingVertical: 8,
+    color: '#495e57',
+    backgroundColor: '#fff',
+    fontFamily: 'Karla-ExtraBold',
+  },
+  name: {
+    fontSize: 20,
+    color: '#000000',
+    paddingBottom: 5,
+    fontFamily: 'Karla-Bold',
+  },
+  description: {
+    color: '#495e57',
+    paddingRight: 5,
+    fontFamily: 'Karla-Medium',
+  },
+  price: {
+    fontSize: 20,
+    color: '#EE9972',
+    paddingTop: 5,
+    fontFamily: 'Karla-Medium',
+  },
+  itemImage: {
+    width: 100,
+    height: 100,
+  },
+  avatar: {
+    flex: 1,
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  avatarEmpty: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#0b9a6a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSection: {
+    backgroundColor: '#495e57',
+    padding: 15,
+  },
+  heroHeader: {
+    color: '#f4ce14',
+    fontSize: 54,
+    fontFamily: 'MarkaziText-Medium',
+  },
+  heroHeader2: {
+    color: '#fff',
+    fontSize: 30,
+    fontFamily: 'MarkaziText-Medium',
+  },
+  heroText: {
+    color: '#fff',
+    fontFamily: 'Karla-Medium',
+    fontSize: 14,
+  },
+  heroBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  heroContent: {
+    flex: 1,
+  },
+  heroImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+  },
+  delivery: {
+    fontSize: 18,
+    padding: 15,
+    fontFamily: 'Karla-ExtraBold',
+  },
+});
