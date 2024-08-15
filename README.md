@@ -23,3 +23,6 @@ Then, a QR Code wil appear on your terminal.
 
 2. On Android : Scan QR code through Expo Go app.
 
+### Demo
+
+[![Watch the video](https://raw.githubusercontent.com/yourusername/yourrepository/main/assets/thumbnail.jpg)](https://raw.githubusercontent.com/yourusername/yourrepository/main/assets/video.mp4)
