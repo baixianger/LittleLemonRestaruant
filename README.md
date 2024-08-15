@@ -25,4 +25,4 @@ Then, a QR Code wil appear on your terminal.
 
 ### Demo
 
-[![Watch the video](https://raw.githubusercontent.com/yourusername/yourrepository/main/assets/thumbnail.jpg)](https://raw.githubusercontent.com/yourusername/yourrepository/main/assets/video.mp4)
+[![Watch the video](https://github.com/baixianger/LittleLemonRestaruant/blob/main/demo_thumbnail.jpg?raw=true)](https://raw.githubusercontent.com/baixianger/LittleLemonRestaruant/main/assets/demo.mp4)
