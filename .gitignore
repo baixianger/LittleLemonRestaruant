@@ -1,0 +1,4 @@
+node_modules
+
+# ignore apple files
+.DS_Store
