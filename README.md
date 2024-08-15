@@ -1,4 +1,4 @@
-# Little Lemon Food Ordering App
+# Little Lemon Restaurant  
 
 - The application is a React Native Expo Food app.
 - Users will be capable of signing up on the Little Lemon restaurant app.
@@ -25,4 +25,4 @@ Then, a QR Code wil appear on your terminal.
 
 ### Demo
 
-[![Watch the video](https://github.com/baixianger/LittleLemonRestaruant/blob/main/demo_thumbnail.jpg?raw=true)](https://raw.githubusercontent.com/baixianger/LittleLemonRestaruant/main/assets/demo.mp4)
+[![Watch the video](https://github.com/baixianger/LittleLemonRestaruant/blob/main/demo_thumbnail.jpg?raw=true)](https://github.com/baixianger/LittleLemonRestaruant/raw/main/demo.mp4)
